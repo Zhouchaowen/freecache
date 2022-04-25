@@ -36,6 +36,7 @@ type entryHdr struct {
 
 // a segment contains 256 slots, a slot is an array of entry pointers ordered by hash16 value
 // the entry can be looked up by hash value of the key.
+// 一个段包含 256 个槽，一个槽是一个按 hash16 值排序的条目指针数组，可以通过键的哈希值查找条目。
 type segment struct {
 	rb            RingBuf // ring buffer that stores data
 	segId         int
@@ -43,17 +44,19 @@ type segment struct {
 	missCount     int64
 	hitCount      int64
 	entryCount    int64
-	totalCount    int64      // number of entries in ring buffer, including deleted entries.
-	totalTime     int64      // used to calculate least recent used entry.
-	timer         Timer      // Timer giving current time
-	totalEvacuate int64      // used for debug
-	totalExpired  int64      // used for debug
-	overwrites    int64      // used for debug
-	touched       int64      // used for debug
-	vacuumLen     int64      // up to vacuumLen, new data can be written without overwriting old data.
-	slotLens      [256]int32 // The actual length for every slot.
-	slotCap       int32      // max number of entry pointers a slot can hold.
-	slotsData     []entryPtr // shared by all 256 slots
+	totalCount    int64 // number of entries in ring buffer, including deleted entries.
+	totalTime     int64 // used to calculate least recent used entry.
+	timer         Timer // Timer giving current time
+	totalEvacuate int64 // used for debug
+	totalExpired  int64 // used for debug
+	overwrites    int64 // used for debug
+	touched       int64 // used for debug
+	vacuumLen     int64 // up to vacuumLen, new data can be written without overwriting old data.
+
+	slotLens [256]int32 // The actual length for every slot.
+	slotCap  int32      // max number of entry pointers a slot can hold.
+	// 存储数据索引  offset
+	slotsData []entryPtr // shared by all 256 slots
 }
 
 func newSegment(bufSize int, segId int, timer Timer) (seg segment) {
@@ -75,12 +78,15 @@ func (seg *segment) set(key, value []byte, hashVal uint64, expireSeconds int) (e
 		// Do not accept large entry.
 		return ErrLargeEntry
 	}
+
+	// 计算过期时间
 	now := seg.timer.Now()
 	expireAt := uint32(0)
 	if expireSeconds > 0 {
 		expireAt = now + uint32(expireSeconds)
 	}
 
+	// 找到key对应的最小idx
 	slotId := uint8(hashVal >> 8)
 	hash16 := uint16(hashVal >> 16)
 	slot := seg.getSlot(slotId)

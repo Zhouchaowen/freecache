@@ -31,12 +31,15 @@ func hashFunc(data []byte) uint64 {
 // If the size is set relatively large, you should call
 // `debug.SetGCPercent()`, set it to a much smaller value
 // to limit the memory consumption and GC pause time.
+// NewCache 按大小返回一个新初始化的缓存。缓存大小将至少设置为 512KB。
+// 如果 size 设置的比较大，你应该调用 `debug.SetGCPercent()`，将它设置为一个更小的值来限制内存消耗和 GC 暂停时间。
 func NewCache(size int) (cache *Cache) {
 	return NewCacheCustomTimer(size, defaultTimer{})
 }
 
 // NewCacheCustomTimer returns new cache with custom timer.
 func NewCacheCustomTimer(size int, timer Timer) (cache *Cache) {
+	// buf最小为521k
 	if size < minBufSize {
 		size = minBufSize
 	}
