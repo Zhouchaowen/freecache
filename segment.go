@@ -22,6 +22,7 @@ type entryPtr struct {
 }
 
 // entry header struct in ring buffer, followed by key and value.
+// 环形缓冲区中的条目头结构，后跟键和值。
 type entryHdr struct {
 	accessTime uint32
 	expireAt   uint32
@@ -51,10 +52,13 @@ type segment struct {
 	totalExpired  int64 // used for debug
 	overwrites    int64 // used for debug
 	touched       int64 // used for debug
-	vacuumLen     int64 // up to vacuumLen, new data can be written without overwriting old data.
+	// 环形数组可用容量，用于维护环形数组，保证写入新数据而不会覆盖旧数据
+	vacuumLen int64 // up to vacuumLen, new data can be written without overwriting old data.
 
+	// 每个插槽的实际长度，用于计算每个插槽在slotsData中结束偏移位置
 	slotLens [256]int32 // The actual length for every slot.
-	slotCap  int32      // max number of entry pointers a slot can hold.
+	// 一个槽可以容纳的最大入口指针数，只要有一个 slot 的长度等于 slotCap 时，就会触发扩容
+	slotCap int32 // max number of entry pointers a slot can hold.
 	// 存储数据索引  offset
 	slotsData []entryPtr // shared by all 256 slots
 }
@@ -146,7 +150,7 @@ func (seg *segment) set(key, value []byte, hashVal uint64, expireSeconds int) (e
 	}
 	newOff := seg.rb.End()
 	seg.insertEntryPtr(slotId, hash16, newOff, idx, hdr.keyLen)
-	seg.rb.Write(hdrBuf[:])
+	seg.rb.Write(hdrBuf[:]) // 写入循环数组
 	seg.rb.Write(key)
 	seg.rb.Write(value)
 	seg.rb.Skip(int64(hdr.valCap - hdr.valLen))
@@ -373,7 +377,7 @@ func (seg *segment) updateEntryPtr(slotId uint8, hash16 uint16, oldOff, newOff i
 
 func (seg *segment) insertEntryPtr(slotId uint8, hash16 uint16, offset int64, idx int, keyLen uint16) {
 	if seg.slotLens[slotId] == seg.slotCap {
-		seg.expand()
+		seg.expand() // 扩容
 	}
 	seg.slotLens[slotId]++
 	atomic.AddInt64(&seg.entryCount, 1)
