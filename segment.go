@@ -93,8 +93,8 @@ func (seg *segment) set(key, value []byte, hashVal uint64, expireSeconds int) (e
 	// 找到key对应的最小idx
 	slotId := uint8(hashVal >> 8)
 	hash16 := uint16(hashVal >> 16)
-	slot := seg.getSlot(slotId)
-	idx, match := seg.lookup(slot, hash16, key)
+	slot := seg.getSlot(slotId)                 // 从slotsData获取[]entryPtr (entry在RingBuf的偏移量信息)
+	idx, match := seg.lookup(slot, hash16, key) // 查找是否存在该key
 
 	var hdrBuf [ENTRY_HDR_SIZE]byte
 	hdr := (*entryHdr)(unsafe.Pointer(&hdrBuf[0]))
@@ -140,7 +140,7 @@ func (seg *segment) set(key, value []byte, hashVal uint64, expireSeconds int) (e
 	}
 
 	entryLen := ENTRY_HDR_SIZE + int64(len(key)) + int64(hdr.valCap)
-	slotModified := seg.evacuate(entryLen, slotId, now)
+	slotModified := seg.evacuate(entryLen, slotId, now) // TODO 扩容
 	if slotModified {
 		// the slot has been modified during evacuation, we need to looked up for the 'idx' again.
 		// otherwise there would be index out of bound error.
@@ -355,6 +355,7 @@ func (seg *segment) ttl(key []byte, hashVal uint64) (timeLeft uint32, err error)
 	return
 }
 
+// 扩容2倍
 func (seg *segment) expand() {
 	newSlotData := make([]entryPtr, seg.slotCap*2*256)
 	for i := 0; i < 256; i++ {
@@ -382,7 +383,7 @@ func (seg *segment) insertEntryPtr(slotId uint8, hash16 uint16, offset int64, id
 	seg.slotLens[slotId]++
 	atomic.AddInt64(&seg.entryCount, 1)
 	slot := seg.getSlot(slotId)
-	copy(slot[idx+1:], slot[idx:])
+	copy(slot[idx+1:], slot[idx:]) // 移位
 	slot[idx].offset = offset
 	slot[idx].hash16 = hash16
 	slot[idx].keyLen = keyLen
@@ -409,6 +410,7 @@ func (seg *segment) delEntryPtr(slotId uint8, slot []entryPtr, idx int) {
 	atomic.AddInt64(&seg.entryCount, -1)
 }
 
+// 利用hash16进行二分查找
 func entryPtrIdx(slot []entryPtr, hash16 uint16) (idx int) {
 	high := len(slot)
 	for idx < high {
@@ -425,11 +427,12 @@ func entryPtrIdx(slot []entryPtr, hash16 uint16) (idx int) {
 
 func (seg *segment) lookup(slot []entryPtr, hash16 uint16, key []byte) (idx int, match bool) {
 	idx = entryPtrIdx(slot, hash16)
-	for idx < len(slot) {
+	for idx < len(slot) { // hash冲突遍历
 		ptr := &slot[idx]
 		if ptr.hash16 != hash16 {
 			break
 		}
+		// 对比key是否相等
 		match = int(ptr.keyLen) == len(key) && seg.rb.EqualAt(key, ptr.offset+ENTRY_HDR_SIZE)
 		if match {
 			return
