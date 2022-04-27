@@ -97,7 +97,7 @@ func (seg *segment) set(key, value []byte, hashVal uint64, expireSeconds int) (e
 	idx, match := seg.lookup(slot, hash16, key) // 查找是否存在该key
 
 	var hdrBuf [ENTRY_HDR_SIZE]byte
-	hdr := (*entryHdr)(unsafe.Pointer(&hdrBuf[0]))
+	hdr := (*entryHdr)(unsafe.Pointer(&hdrBuf[0])) // entry的header缓存
 	if match {
 		matchedPtr := &slot[idx]
 		seg.rb.ReadAt(hdrBuf[:], matchedPtr.offset)
@@ -165,10 +165,10 @@ func (seg *segment) touch(key []byte, hashVal uint64, expireSeconds int) (err er
 		return ErrLargeKey
 	}
 
-	slotId := uint8(hashVal >> 8)
-	hash16 := uint16(hashVal >> 16)
-	slot := seg.getSlot(slotId)
-	idx, match := seg.lookup(slot, hash16, key)
+	slotId := uint8(hashVal >> 8)               // 计算槽
+	hash16 := uint16(hashVal >> 16)             // 计算哈希
+	slot := seg.getSlot(slotId)                 // 通过slotId获取存储的连续槽数组
+	idx, match := seg.lookup(slot, hash16, key) // 根据连续槽数组 获取key
 	if !match {
 		err = ErrNotFound
 		return
@@ -376,6 +376,7 @@ func (seg *segment) updateEntryPtr(slotId uint8, hash16 uint16, oldOff, newOff i
 	ptr.offset = newOff
 }
 
+// 存储entryPtr到slotsData中
 func (seg *segment) insertEntryPtr(slotId uint8, hash16 uint16, offset int64, idx int, keyLen uint16) {
 	if seg.slotLens[slotId] == seg.slotCap {
 		seg.expand() // 扩容
@@ -383,7 +384,7 @@ func (seg *segment) insertEntryPtr(slotId uint8, hash16 uint16, offset int64, id
 	seg.slotLens[slotId]++
 	atomic.AddInt64(&seg.entryCount, 1)
 	slot := seg.getSlot(slotId)
-	copy(slot[idx+1:], slot[idx:]) // 移位
+	copy(slot[idx+1:], slot[idx:]) // 移位，应为要求有序
 	slot[idx].offset = offset
 	slot[idx].hash16 = hash16
 	slot[idx].keyLen = keyLen
@@ -433,7 +434,7 @@ func (seg *segment) lookup(slot []entryPtr, hash16 uint16, key []byte) (idx int,
 			break
 		}
 		// 对比key是否相等
-		match = int(ptr.keyLen) == len(key) && seg.rb.EqualAt(key, ptr.offset+ENTRY_HDR_SIZE)
+		match = int(ptr.keyLen) == len(key) && seg.rb.EqualAt(key, ptr.offset+ENTRY_HDR_SIZE) // 跳过header
 		if match {
 			return
 		}

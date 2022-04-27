@@ -115,21 +115,22 @@ func (rb *RingBuf) Slice(off, length int64) ([]byte, error) {
 	return buf, nil
 }
 
+// 将数据写入RingBuf循环队列。
 func (rb *RingBuf) Write(p []byte) (n int, err error) {
 	if len(p) > len(rb.data) {
 		err = ErrOutOfRange
 		return
 	}
-	for n < len(p) {
+	for n < len(p) { // 写入RingBuf，并处理临界问题
 		written := copy(rb.data[rb.index:], p[n:])
 		rb.end += int64(written)
 		n += written
 		rb.index += written
-		if rb.index >= len(rb.data) {
-			rb.index -= len(rb.data)
+		if rb.index >= len(rb.data) { // 处理临界
+			rb.index -= len(rb.data) // 从头开始
 		}
 	}
-	if int(rb.end-rb.begin) > len(rb.data) {
+	if int(rb.end-rb.begin) > len(rb.data) { // 更新begin
 		rb.begin = rb.end - int64(len(rb.data))
 	}
 	return
