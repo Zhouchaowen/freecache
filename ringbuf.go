@@ -13,10 +13,10 @@ var ErrOutOfRange = errors.New("out of range")
 // size, old data will be overwritten by new data.
 // It only contains the data in the stream from begin to end
 type RingBuf struct {
-	begin int64 // beginning offset of the data stream.
-	end   int64 // ending offset of the data stream.
-	data  []byte
-	index int //range from '0' to 'len(rb.data)-1'
+	begin int64  // beginning offset of the data stream. 数据的起始位置，取模len(data)为数据的真实位置
+	end   int64  // ending offset of the data stream. 数据的结束位置，取模len(data)为数据的真实位置
+	data  []byte // 数据存放的底层byte数组
+	index int    //range from '0' to 'len(rb.data)-1' 维护数据下一次要写入的真实位置&所有数据的起始位置
 }
 
 func NewRingBuf(size int, begin int64) (rb RingBuf) {

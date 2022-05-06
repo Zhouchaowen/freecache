@@ -15,52 +15,52 @@ var ErrNotFound = errors.New("Entry not found")
 
 // entry pointer struct points to an entry in ring buffer
 type entryPtr struct {
-	offset   int64  // entry offset in ring buffer
-	hash16   uint16 // entries are ordered by hash16 in a slot.
-	keyLen   uint16 // used to compare a key
-	reserved uint32
+	offset   int64  // entry offset in ring buffer 数据在ringBuf中的偏移量
+	hash16   uint16 // entries are ordered by hash16 in a slot. 数据hash16的值
+	keyLen   uint16 // used to compare a key 数据key的长度
+	reserved uint32 // 预留字段，用于内存对齐
 }
 
 // entry header struct in ring buffer, followed by key and value.
 // 环形缓冲区中的条目头结构，后跟键和值。
 type entryHdr struct {
-	accessTime uint32
-	expireAt   uint32
-	keyLen     uint16
-	hash16     uint16
-	valLen     uint32
-	valCap     uint32
-	deleted    bool
-	slotId     uint8
-	reserved   uint16
+	accessTime uint32 // 数据的访问时间
+	expireAt   uint32 // 数据的过期时间
+	keyLen     uint16 // 数据key的长度
+	hash16     uint16 // 数据hash16的值
+	valLen     uint32 // 数据val的长度
+	valCap     uint32 // 为数据val分配的容量
+	deleted    bool   // 数据是否被删除
+	slotId     uint8  // 数据存入的slotId
+	reserved   uint16 // 预留字段，也用来做内存对齐
 }
 
 // a segment contains 256 slots, a slot is an array of entry pointers ordered by hash16 value
 // the entry can be looked up by hash value of the key.
 // 一个段包含 256 个槽，一个槽是一个按 hash16 值排序的条目指针数组，可以通过键的哈希值查找条目。
 type segment struct {
-	rb            RingBuf // ring buffer that stores data
-	segId         int
-	_             uint32
-	missCount     int64
-	hitCount      int64
-	entryCount    int64
-	totalCount    int64 // number of entries in ring buffer, including deleted entries.
-	totalTime     int64 // used to calculate least recent used entry.
-	timer         Timer // Timer giving current time
-	totalEvacuate int64 // used for debug
-	totalExpired  int64 // used for debug
-	overwrites    int64 // used for debug
-	touched       int64 // used for debug
+	rb            RingBuf // ring buffer that stores data 存储byte数据的ringBuf
+	segId         int     // 当前segment的id
+	_             uint32  // 为了保障atomic在32位系统上访问64位字的安全性
+	missCount     int64   // 当前segment没有找到key的次数
+	hitCount      int64   // 当前segment找到key的次数
+	entryCount    int64   // 当前segment存入(key, value)对的个数
+	totalCount    int64   // number of entries in ring buffer, including deleted entries. 当前segment存过的所有(key, value)对，包括已经删除的
+	totalTime     int64   // used to calculate least recent used entry. 存储所有的(key, value)对访问时间的总和，便于近似LRU操作
+	timer         Timer   // Timer giving current time 当前segment的计时组件
+	totalEvacuate int64   // used for debug 执行近似LRU策略的次数
+	totalExpired  int64   // used for debug 过期的(key, value)对的个数
+	overwrites    int64   // used for debug 覆盖写的次数
+	touched       int64   // used for debug 更新过期(key, value)对的过期时间函数(Touch)的计数器
 	// 环形数组可用容量，用于维护环形数组，保证写入新数据而不会覆盖旧数据
-	vacuumLen int64 // up to vacuumLen, new data can be written without overwriting old data.
+	vacuumLen int64 // up to vacuumLen, new data can be written without overwriting old data. 当前segment的剩余容量
 
 	// 每个插槽的实际长度，用于计算每个插槽在slotsData中结束偏移位置
-	slotLens [256]int32 // The actual length for every slot.
+	slotLens [256]int32 // The actual length for every slot. 存储所有slot实际存储的数据长度
 	// 一个槽可以容纳的最大入口指针数，只要有一个 slot 的长度等于 slotCap 时，就会触发扩容
-	slotCap int32 // max number of entry pointers a slot can hold.
+	slotCap int32 // max number of entry pointers a slot can hold. 每一个slot占用的容量
 	// 存储数据索引  offset
-	slotsData []entryPtr // shared by all 256 slots
+	slotsData []entryPtr // shared by all 256 slots 被256个slot共享的底层切片
 }
 
 func newSegment(bufSize int, segId int, timer Timer) (seg segment) {
