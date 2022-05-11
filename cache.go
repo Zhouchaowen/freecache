@@ -189,6 +189,7 @@ func (cache *Cache) GetWithExpiration(key []byte) (value []byte, expireAt uint32
 }
 
 // TTL returns the TTL time left for a given key or a not found error.
+// 返回给定键或未找到错误的剩余 TTL 时间。
 func (cache *Cache) TTL(key []byte) (timeLeft uint32, err error) {
 	hashVal := hashFunc(key)
 	segID := hashVal & segmentAndOpVal

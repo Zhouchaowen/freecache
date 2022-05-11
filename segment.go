@@ -207,6 +207,7 @@ func (seg *segment) touch(key []byte, hashVal uint64, expireSeconds int) (err er
 func (seg *segment) evacuate(entryLen int64, slotId uint8, now uint32) (slotModified bool) {
 	var oldHdrBuf [ENTRY_HDR_SIZE]byte
 	consecutiveEvacuate := 0
+	// RingBuf容量不足,开始淘汰
 	for seg.vacuumLen < entryLen {
 		oldOff := seg.rb.End() + seg.vacuumLen - seg.rb.Size()
 		seg.rb.ReadAt(oldHdrBuf[:], oldOff)
@@ -220,8 +221,10 @@ func (seg *segment) evacuate(entryLen int64, slotId uint8, now uint32) (slotModi
 			continue
 		}
 		expired := oldHdr.expireAt != 0 && oldHdr.expireAt < now
+		// LRU entry最近使用情况
 		leastRecentUsed := int64(oldHdr.accessTime)*atomic.LoadInt64(&seg.totalCount) <= atomic.LoadInt64(&seg.totalTime)
 		if expired || leastRecentUsed || consecutiveEvacuate > 5 {
+			// entry 如果已经过期，或者满足置换条件，则生产掉entry
 			seg.delEntryPtrByOffset(oldHdr.slotId, oldHdr.hash16, oldOff)
 			if oldHdr.slotId == slotId {
 				slotModified = true
@@ -237,6 +240,7 @@ func (seg *segment) evacuate(entryLen int64, slotId uint8, now uint32) (slotModi
 			}
 		} else {
 			// evacuate an old entry that has been accessed recently for better cache hit rate.
+			// 如果不满足置换条件，则将entry从环头调换到环尾
 			newOff := seg.rb.Evacuate(oldOff, int(oldEntryLen))
 			seg.updateEntryPtr(oldHdr.slotId, oldHdr.hash16, oldOff, newOff)
 			consecutiveEvacuate++
