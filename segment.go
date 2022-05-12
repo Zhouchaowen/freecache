@@ -141,7 +141,7 @@ func (seg *segment) set(key, value []byte, hashVal uint64, expireSeconds int) (e
 	}
 
 	entryLen := ENTRY_HDR_SIZE + int64(len(key)) + int64(hdr.valCap)
-	slotModified := seg.evacuate(entryLen, slotId, now) // TODO 扩容
+	slotModified := seg.evacuate(entryLen, slotId, now) // TODO LRU
 	if slotModified {
 		// the slot has been modified during evacuation, we need to looked up for the 'idx' again.
 		// otherwise there would be index out of bound error.
@@ -221,7 +221,7 @@ func (seg *segment) evacuate(entryLen int64, slotId uint8, now uint32) (slotModi
 			continue
 		}
 		expired := oldHdr.expireAt != 0 && oldHdr.expireAt < now
-		// LRU entry最近使用情况
+		// LRU entry最近使用情况（最近一次时间是否小于平均时间）
 		leastRecentUsed := int64(oldHdr.accessTime)*atomic.LoadInt64(&seg.totalCount) <= atomic.LoadInt64(&seg.totalTime)
 		if expired || leastRecentUsed || consecutiveEvacuate > 5 {
 			// entry 如果已经过期，或者满足置换条件，则生产掉entry
@@ -453,7 +453,7 @@ func (seg *segment) lookupByOff(slot []entryPtr, hash16 uint16, offset int64) (i
 	idx = entryPtrIdx(slot, hash16)
 	for idx < len(slot) {
 		ptr := &slot[idx]
-		if ptr.hash16 != hash16 {
+		if ptr.hash16 != hash16 { // 有可能有 hash 冲突
 			break
 		}
 		match = ptr.offset == offset
@@ -496,5 +496,6 @@ func (seg *segment) clear() {
 // 通过slotId获取槽对应条目指针数组 []entryPtr
 func (seg *segment) getSlot(slotId uint8) []entryPtr {
 	slotOff := int32(slotId) * seg.slotCap
+	// 获取[]entryPtr    起始位置  : 结束位置                      :  当前槽对应的容量位置
 	return seg.slotsData[slotOff : slotOff+seg.slotLens[slotId] : slotOff+seg.slotCap]
 }

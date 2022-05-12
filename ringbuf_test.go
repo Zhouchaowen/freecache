@@ -1,6 +1,7 @@
 package freecache
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -38,4 +39,15 @@ func TestRingBuf(t *testing.T) {
 		 *    Hence, run the test once more again with reset buffer. */
 		rb.Reset(0)
 	}
+}
+
+func TestRingBufMove(t *testing.T) {
+	rb := NewRingBuf(16, 0)
+	rb.Write([]byte("11111111"))
+	rb.Write([]byte("222222"))
+
+	off := rb.Evacuate(0, 8)
+	fmt.Println("off:", off)
+	fmt.Println(string(rb.Dump()))
+
 }
